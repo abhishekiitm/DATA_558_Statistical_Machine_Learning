@@ -1,0 +1,311 @@
+---
+title: "Untitled"
+output: pdf_document
+date: '2022-04-11'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 5_a
+
+```{r cars}
+library(ggplot2)
+library(class)
+library(ISLR2)
+library(GGally)
+
+set.seed(999)
+
+n1 = 25
+
+generate_df <- function(n1){
+  # function to generate data for Q5
+  x1 = rnorm(n1)
+  x2 = rnorm(n1)
+  label_red = rep("red", n1)
+  df_red = data.frame(x1 = x1, x2 = x2, label = label_red)
+  x1 = rnorm(n1, mean=1.5)
+  x2 = rnorm(n1, mean=1.5)
+  label_blue = rep("blue", n1)
+  df_blue = data.frame(x1 = x1, x2 = x2, label = label_blue)
+  
+  X_df = rbind(df_red, df_blue)
+  return (X_df)
+}
+
+# generate training data
+X_df = generate_df(n1)
+
+# plot a)
+ggplot(X_df, aes(x1, x2)) +
+  geom_point(aes(color=label), size=1) + xlim(-3.5, 3.5) + ylim(-3.5, 3.5) +
+  scale_color_manual(values=c('blue', 'red')) + coord_fixed()
+
+```
+
+## 5_b
+
+```{r pressure}
+# generate test data
+test_df = generate_df(n1)
+
+# add type field to denote train/test data
+X_df["type"] = rep("train", 2*n1)
+test_df["type"] = rep("test", 2*n1)
+
+# combine train and test into one data frame
+X_df = rbind(X_df, test_df)
+
+# plot b)
+ggplot(X_df, aes(x1, x2, shape=type, color=label)) +
+  geom_point(size=1) + 
+  xlim(-3.5, 3.5) + ylim(-3.5, 3.5) +
+  scale_color_manual(values=c('blue', 'red')) + 
+  scale_shape_manual(values = c(1, 4)) + coord_fixed()
+
+```
+
+## 5 c
+
+```{r 5 c}
+
+# convert to numeric data type for prediction
+X_df["y"] = as.numeric(X_df$label == "blue")
+
+# get train and test data
+train_df = X_df[X_df$type=="train",]
+test_df = X_df[X_df$type=="test",]
+
+K = 20
+train_acc = rep(0, K)
+test_acc = rep(0, K)
+k_list = 1:K
+temparray <- rep(0, (K*nrow(test_df)))
+temparray = as.integer(temparray)
+cl_test_arr <- array(temparray, dim = c(K, nrow(test_df)))
+cl_train_arr <- array(temparray, dim = c(K, nrow(test_df)))
+
+# run knn for different values of k
+for(k in 1:K) {
+  # knn classification on test data
+  cl_test <- knn(train = train_df[, 1:2], test = test_df[, 1:2], cl = train_df$y, k = k)
+  cl_test_arr[k,] = as.integer(cl_test) - 1
+  test_acc[k] = mean(cl_test == test_df$y)
+  # knn classification on train data
+  cl_train <- knn(train = train_df[, 1:2], test = train_df[, 1:2], cl = train_df$y, k = k)
+  cl_train_arr[k,] = as.integer(cl_train) - 1
+  train_acc[k] = mean(cl_train == train_df$y)
+}
+
+# create data frame to plot train, test errors
+
+plot_df = rbind(data.frame(error = 1-train_acc, type="train", k_inv=1/k_list), 
+      data.frame(error = 1-test_acc, type="test", k_inv=1/k_list))
+
+# plot (c)
+ggplot(plot_df, aes(k_inv, error, group=type, col=type)) + 
+  geom_line() + scale_x_continuous(trans = 'log10', breaks = round(1/k_list, 2)) +
+  theme(axis.text.x = element_text(angle = 50))
+```
+
+## 5 d
+
+```{r 5 d}
+k = 9
+test_df["pred"] = ifelse(cl_test_arr[k,], "blue", "red")
+
+p1 = ggplot(test_df, aes(x1, x2, shape=factor(pred), color=label)) +
+  geom_point(size=1) + 
+  xlim(-3.5, 3.5) + ylim(-3.5, 3.5) +
+  scale_color_manual(values=c('blue', 'red')) + 
+  scale_shape_manual(values = c(1, 4)) + coord_fixed()
+p1
+
+```
+
+## 5 e
+
+```{r 5 e}
+x <- seq(-4, 4, length.out=200)
+y <- seq(-4, 4, length.out=200)
+pr<-data.frame(x=rep(x, length(y)), y=rep(y, each=length(x)))
+pr["z"] = pr$x + pr$y
+
+ggplot(test_df, aes(x1, x2)) +
+  geom_point(size=1, aes(color=label)) + 
+  xlim(-3.5, 3.5) + ylim(-3.5, 3.5) +
+  scale_color_manual(values=c('blue', 'red')) + coord_fixed() +
+  geom_contour(data=pr, aes(x=x, y=y, z=z), colour='orange', breaks=c(1.5))
+
+```
+```{r 5 e}
+# 5 e simulation
+# number of samples to simulate
+n1 = 100000
+# generate data sampled from the red and blue distributions
+X_df_gen = generate_df(n1)
+# get predictions made by the Bayes classifier
+X_df_gen["pred"] = ifelse(X_df_gen$x1+X_df_gen$x2>1.5, "blue", "red")
+# Bayes error
+1-mean(X_df_gen$label == X_df_gen$pred)
+```
+## 6 a
+
+```{r 6 a}
+set.seed(NULL)
+set.seed(99)
+# size of training data
+n1 = 200
+
+get_label <- function(x1, x2){
+  # function that generates the label given x1, x2
+  d = (x1-0.5)^2+(x2-0.5)^2
+  if ( d>0.15 && x1>0.5 ){
+    return ("red")
+  }
+  else if ( d>0.15 && x1<=0.5 ) {
+    return ("green")
+  }
+  else {
+    return ("blue")
+  }
+}
+
+generate_df_2 <- function(){
+  # function that generates training data in Q6
+  x1 = runif(n1)
+  x2 = runif(n1)
+  
+  X_df = data.frame(x1=x1, x2=x2, label=mapply(get_label, x1, x2))
+  
+  return (X_df)
+}
+
+X_df = generate_df_2()
+
+# plot a)
+ggplot(X_df, aes(x1, x2)) +
+  geom_point(aes(color=label), size=1) + xlim(0, 1) + ylim(0, 1) +
+  scale_color_manual(values=c('blue', 'green', 'red')) + coord_fixed()
+
+```
+
+## 6 b
+
+```{r 6 b}
+test_df = generate_df_2()
+
+# add type field to denote train/test data
+X_df["type"] = rep("train", n1)
+test_df["type"] = rep("test", n1)
+
+# combine train and test data in one data frame
+X_df = rbind(X_df, test_df)
+
+# plot b)
+ggplot(X_df, aes(x1, x2, shape=type, color=label)) +
+  geom_point(size=1) + 
+  xlim(0, 1) + ylim(0, 1) +
+  scale_color_manual(values=c('blue', 'green', 'red')) + 
+  scale_shape_manual(values = c(1, 4)) + coord_fixed()
+```
+
+## 6 c
+
+```{r 6 c}
+
+# convert categorical variable to numeric
+X_df["y"] = unclass(X_df$label)
+
+# get train and test data
+train_df = X_df[X_df$type=="train",]
+test_df = X_df[X_df$type=="test",]
+
+K = 20
+train_acc = rep(0, K)
+test_acc = rep(0, K)
+k_list = 1:K
+temparray <- rep(0, (K*nrow(test_df)))
+temparray = as.numeric(temparray)
+cl_test_arr <- array(temparray, dim = c(K, nrow(test_df)))
+cl_train_arr <- array(temparray, dim = c(K, nrow(test_df)))
+
+# run knn for different values of k
+for(k in 1:K) {
+  # knn classification on test data
+  cl_test <- knn(train = train_df[, 1:2], test = test_df[, 1:2], cl = train_df$y, k = k)
+  cl_test_arr[k,] = as.integer(cl_test) - 1
+  test_acc[k] = mean(cl_test == test_df$y)
+  # knn classification on train data
+  cl_train <- knn(train = train_df[, 1:2], test = train_df[, 1:2], cl = train_df$y, k = k)
+  cl_train_arr[k,] = as.integer(cl_train) - 1
+  train_acc[k] = mean(cl_train == train_df$y)
+}
+
+# create data frame to plot train, test errors
+
+plot_df = rbind(data.frame(error = 1-train_acc, type="train", k_inv=1/k_list), 
+      data.frame(error = 1-test_acc, type="test", k_inv=1/k_list))
+
+# plot (c)
+ggplot(plot_df, aes(k_inv, error, group=type, col=type)) + 
+  geom_line() + scale_x_continuous(trans = 'log10', breaks = round(1/k_list, 2)) +
+  theme(axis.text.x = element_text(angle = 50))
+```
+
+## 6 d
+
+```{r 6 d}
+label_from_level = function(level) {
+  # returns label given the corresponding level
+  label = levels(cl_test)[level+1]
+  return (label)
+}
+
+k = 1
+
+# get predictions
+test_df["pred"] = cl_test_arr[k,]
+test_df["pred"] = lapply(test_df["pred"], label_from_level)
+
+# plot d)
+ggplot(test_df, aes(x1, x2, shape=pred, color=label)) +
+  geom_point(size=1) + 
+  xlim(0, 1) + ylim(0, 1) +
+  scale_color_manual(values=c('blue', 'green', 'red')) + 
+  scale_shape_manual(values = c(1, 4, 7)) + coord_fixed()
+```
+
+## 7 
+
+```{r 7}
+# a
+c(nrow(Boston), ncol(Boston))
+
+# b
+ggpairs(Boston)
+
+# d
+summary(Boston["crim"])
+summary(Boston["tax"])
+summary(Boston["ptratio"])
+
+# e
+sum(Boston["chas"])
+
+# f
+c(mean(Boston$ptratio), sd(Boston$ptratio))
+
+# g
+summary(Boston)
+Boston[Boston["medv"]==50,]
+
+# h
+summary(Boston)
+nrow(Boston[Boston["rm"]>6,])
+nrow(Boston[Boston["rm"]>8,])
+Boston[Boston["rm"]>8,]
+
+```
