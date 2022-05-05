@@ -1,0 +1,217 @@
+---
+title: "Untitled"
+output: pdf_document
+date: '2022-04-22'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1_a
+
+```{r 1}
+library(ggplot2)
+# library(class)
+library(ISLR2)
+
+# 1 a) encode origin as a factor and fit the linear model 
+auto_df = Auto
+auto_df <- subset(auto_df, select = -c(name))
+auto_df$origin = factor(auto_df$origin)
+lm1.fit = lm(mpg ~ ., data = auto_df)
+lm1.summary = summary(lm1.fit)
+lm1.summary
+
+# 1 b) calculate the MSE 
+sum(lm1.summary$residuals^2)/lm1.summary$df[2]
+
+# 1 c) predict
+predict_df = data.frame(cylinders = c(3), displacement = c(100.0), horsepower = c(85), weight = c(3000), acceleration = c(20), year = c(80), origin = c(3))
+predict_df$origin = factor(predict_df$origin)
+predict(lm1.fit, predict_df)
+```
+
+```{r 2}
+# 2 a)
+auto_df = Auto
+auto_df$origin = factor(auto_df$origin)
+auto_df$origin = relevel(auto_df$origin, ref = 3)   # set Japanese as the baseline
+
+lm2.fit = lm(mpg ~ origin, data = auto_df)
+lm2.fit
+
+predict_df = data.frame(origin = c(1, 2, 3))
+predict_df$origin = factor(predict_df$origin)
+predict(lm2.fit, predict_df)
+
+# 2 b)
+auto_df = Auto
+auto_df$origin = factor(auto_df$origin)
+auto_df$origin = relevel(auto_df$origin, ref = 1)   # set American as the baseline
+
+lm2.fit = lm(mpg ~ origin, data = auto_df)
+lm2.fit
+
+predict_df = data.frame(origin = c(1, 2, 3))
+predict_df$origin = factor(predict_df$origin)
+predict(lm2.fit, predict_df)
+
+# 2 c)
+auto_df = Auto
+auto_df$japanese = ifelse(auto_df$origin==3, 1, -1)
+auto_df$european = ifelse(auto_df$origin==2, 1, -1)
+
+lm2.fit = lm(mpg ~ japanese + european, data = auto_df)
+lm2.fit
+
+predict_df = data.frame(origin = c(1, 2, 3))
+predict_df$japanese = ifelse(predict_df$origin==3, 1, -1)
+predict_df$european = ifelse(predict_df$origin==2, 1, -1)
+predict(lm2.fit, predict_df)
+
+# 2 d)
+auto_df = Auto
+auto_df$origin = auto_df$origin %% 3
+
+lm2.fit = lm(mpg ~ origin, data = auto_df)
+lm2.fit
+
+predict_df = data.frame(origin = c(1, 2, 3))
+predict_df$origin = predict_df$origin %% 3
+predict(lm2.fit, predict_df)
+```
+
+```{r 3}
+# 3
+auto_df = Auto
+auto_df$origin = factor(auto_df$origin)
+
+lm3.fit = lm(mpg ~ origin*horsepower, data = auto_df)
+lm3.fit
+```
+
+```{r 4}
+beta_est_0 = -165.1
+beta_est_1 = 4.8
+
+X_1 = 64
+X_2 = X_1/12
+
+Y = beta_est_0 + beta_est_1 * X_1; Y
+
+beta_est_1_st = 57.6
+Y = beta_est_0 + beta_est_1_st * X_2; Y
+```
+
+```{r 7}
+# 7 a)
+library(MASS)
+#install.packages("mvtnorm")
+library(mvtnorm)
+set.seed(42)
+mu1 <- c(2, 2)
+mu2 <- c(0, 0)
+mu3 <- c(0, 3)
+
+sigma = matrix(c((1^2), (1*1*0), (1*1*0), (1^2)), 2)
+
+N = 50
+bvn1 <- mvrnorm(N, mu = mu1, Sigma = sigma)
+bvn2 <- mvrnorm(N, mu = mu2, Sigma = sigma)
+bvn3 <- mvrnorm(N, mu = mu3, Sigma = sigma)
+
+df_blue = data.frame(x1 = bvn1[,1], x2 = bvn1[,2], label = rep("blue", N))
+df_red = data.frame(x1 = bvn2[,1], x2 = bvn2[,2], label = rep("red", N))
+df_green = data.frame(x1 = bvn3[,1], x2 = bvn3[,2], label = rep("green", N))
+
+X_df = rbind(df_blue, df_red, df_green)
+
+# 7 b)
+min_x1 = min(X_df$x1)
+max_x1 = max(X_df$x1)
+min_x2 = min(X_df$x2)
+max_x2 = max(X_df$x2)
+
+x1_arr <- seq(min_x1, max_x1, length.out=200)
+x2_arr <- seq(min_x2, max_x2, length.out=200)
+
+get_bayes_class <- function(x1, x2) {
+  f1 = dmvnorm(c(x1, x2), mean = mu1, sigma = sigma)
+  f2 = dmvnorm(c(x1, x2), mean = mu2, sigma = sigma)
+  f3 = dmvnorm(c(x1, x2), mean = mu3, sigma = sigma)
+  
+  return (which.max(c(f1, f2, f3)))
+}
+
+bayes_cl_df<-data.frame(x1=rep(x1_arr, length(x2_arr)), x2=rep(x2_arr, each=length(x1_arr)))
+bayes_cl_df["bayes_class"] = mapply(get_bayes_class, bayes_cl_df$x1, bayes_cl_df$x2)
+
+ggplot(X_df, aes(x1, x2)) + geom_point(aes(color=label), size=1) + 
+  scale_color_manual(values=c('blue', 'green', 'red')) + coord_fixed() + 
+  geom_contour(data=bayes_cl_df, aes(x=x1, y=x2, z=bayes_class), colour='black', linetype="dashed", breaks=c(1,2,3), )
+
+# 7 c)
+get_lda_class <- function(cl){
+  if (cl == "red"){
+    return (1)
+  }
+  else if (cl == "blue"){
+    return (2)
+  }
+  else{
+    return (3)
+  }
+}
+
+lda.fit = lda(label ~ x1 + x2, data=X_df)
+preds <-predict(lda.fit, bayes_cl_df)
+bayes_cl_df["lda_class"] = mapply(get_lda_class, preds$class) 
+
+ggplot(X_df, aes(x1, x2)) + geom_point(aes(color=label), size=1) + 
+  scale_color_manual(values=c('blue', 'green', 'red')) + coord_fixed() + 
+  geom_contour(data=bayes_cl_df, aes(x=x1, y=x2, z=bayes_class), colour='black', linetype="dashed", breaks=c(1,2,3), ) +
+  geom_contour(data=bayes_cl_df, aes(x=x1, y=x2, z=lda_class), colour='sienna4', breaks=c(1,2,3), )
+
+# 7 d)
+train_preds = predict(lda.fit)
+table(train_preds$class, X_df$label)
+mean(train_preds$class != X_df$label)
+
+# 7 e)
+bvn1 <- mvrnorm(N, mu = mu1, Sigma = sigma)
+bvn2 <- mvrnorm(N, mu = mu2, Sigma = sigma)
+bvn3 <- mvrnorm(N, mu = mu3, Sigma = sigma)
+
+df_blue = data.frame(x1 = bvn1[,1], x2 = bvn1[,2], label = rep("blue", N))
+df_red = data.frame(x1 = bvn2[,1], x2 = bvn2[,2], label = rep("red", N))
+df_green = data.frame(x1 = bvn3[,1], x2 = bvn3[,2], label = rep("green", N))
+
+X_test_df = rbind(df_blue, df_red, df_green)
+test_preds = predict(lda.fit, X_test_df)
+table(test_preds$class, X_test_df$label)
+mean(test_preds$class != X_test_df$label)
+
+```
+
+```{r 8}
+# 8 a)
+qda.fit = qda(label ~ x1 + x2, data=X_df)
+preds <-predict(qda.fit, bayes_cl_df)
+bayes_cl_df["qda_class"] = mapply(get_lda_class, preds$class) 
+
+ggplot(X_df, aes(x1, x2)) + geom_point(aes(color=label), size=1) + 
+  scale_color_manual(values=c('blue', 'green', 'red')) + coord_fixed() + 
+  geom_contour(data=bayes_cl_df, aes(x=x1, y=x2, z=bayes_class), colour='black', linetype="dashed", breaks=c(1,2,3), ) +
+  geom_contour(data=bayes_cl_df, aes(x=x1, y=x2, z=qda_class), colour='sienna4', breaks=c(1,2,3), )
+
+# 8 b)
+train_preds = predict(qda.fit)
+table(train_preds$class, X_df$label)
+mean(train_preds$class != X_df$label)
+
+# 8 c)
+test_preds = predict(qda.fit, X_test_df)
+table(test_preds$class, X_test_df$label)
+mean(test_preds$class != X_test_df$label)
+```
