@@ -1,0 +1,274 @@
+---
+title: "hw3"
+output: html_document
+date: '2022-05-01'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r 1}
+set.seed(42)
+n = 100
+p = 10000
+y = rnorm(n)
+y = as.data.frame(y)
+x = matrix(rnorm(p*n), ncol = p)
+x = as.data.frame(x)
+data = cbind(y, x)
+type_row = rep("train", n)
+
+val_size = 0.5*n
+val = sample(x = 1:n, size = val_size, replace = FALSE)
+type_row[val] = "val"
+data["type"] = type_row
+
+res = data$y[val] - 0
+mse = sum(res^2)/val_size; mse
+
+train_data = data[data$type=="train",]
+train_data = subset(train_data, select = -c(type))
+val_data = data[data$type=="val",]
+val_data = subset(val_data, select = -c(type))
+
+lm.fit = lm(y ~ ., data = train_data)
+
+y_pred = predict(lm.fit, val_data)
+res = val_data$y - y_pred
+mse = sum(res^2)/val_size; mse
+
+
+```
+
+```{r 2}
+
+# make histogram of correlations 
+cor_xy = cor(x, y)
+q = 10
+
+hist(cor_xy)
+
+# get q most correlated features
+cor_xy_abs = abs(cor_xy)
+corr_filter = sort(cor_xy_abs)[10000-q+1]
+filter_indices = which(cor_xy_abs >= corr_filter)
+cor_xy[filter_indices]
+
+x_o1 = x[, filter_indices]
+
+# option 1) train and test on these features
+data2 = cbind(y, x_o1)
+data2["type"] = type_row
+train_data2 = data2[data2$type=="train",]
+train_data2 = subset(train_data2, select = -c(type))
+val_data2 = data2[data2$type=="val",]
+val_data2 = subset(val_data2, select = -c(type))
+
+lm2.fit = lm(y ~ ., data = train_data2)
+
+y_pred = predict(lm2.fit, val_data2)
+res = val_data2$y - y_pred
+mse = sum(res^2)/val_size; mse
+
+# option 2) use train val set from q1 first, then get q most correlated features in train
+cor_xy = cor(train_data[, -1], train_data$y)
+cor_xy_abs = abs(cor_xy)
+corr_filter = sort(cor_xy_abs)[10000-q+1]
+filter_indices = which(cor_xy_abs >= corr_filter)
+cor_xy[filter_indices]
+
+x_o2 = x[, filter_indices]
+
+data3 = cbind(y, x_o2)
+data3["type"] = type_row
+train_data3 = data3[data3$type=="train",]
+train_data3 = subset(train_data3, select = -c(type))
+val_data3 = data3[data3$type=="val",]
+val_data3 = subset(val_data3, select = -c(type))
+
+lm3.fit = lm(y ~ ., data = train_data3)
+
+y_pred = predict(lm3.fit, val_data3)
+res = val_data3$y - y_pred
+mse = sum(res^2)/val_size; mse
+
+```
+
+```{r 3}
+set.seed(42)
+library(glmnet)
+library(boot)
+library(ggplot2)
+
+data1 <- read.csv("train.csv", header=TRUE, stringsAsFactors=FALSE)
+
+# 3 b)
+
+# There are no missing values in the data frame
+sum(is.na(data1))
+
+glm.fit <- glm(critical_temp ~ ., data = data1)
+cv.glm(data1, glm.fit, K = 10)$delta[1]
+
+
+# 3 c)
+x = model.matrix(critical_temp ~ ., data1)[, -1]
+y = data1$critical_temp
+
+grid <- 10^seq(10, -2, length = 100)
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid)
+
+coeffs = coef(ridge.mod)
+rows = rownames(coeffs)
+
+cols = c("lambda", "coeff", "value")
+plot_df = data.frame(matrix(ncol = length(cols), nrow = 0))
+colnames(plot_df) = cols
+
+
+for(row in rows[2:length(rows)]) {
+  temp_df = data.frame(lambda = grid, coeff = row, value = coeffs[row,])
+  plot_df = rbind(plot_df, temp_df)
+}
+
+ggplot(data = plot_df, aes(x=lambda, y=value)) + geom_line(aes(color = coeff), show.legend = FALSE) + scale_y_continuous(limits = c(-3, 3)) + scale_x_continuous(trans = "log10")
+
+
+# 3 d)
+train <- sample (1: nrow(x), nrow(x) / 2)
+test <- (-train)
+y.test <- y[test]
+
+ridge.mod <- glmnet(x[train , ], y[train], alpha = 0, lambda = grid , thresh = 1e-12)
+
+cv.out <- cv.glmnet(x[train , ], y[train], alpha = 0)
+bestlam = cv.out$lambda.min; bestlam
+
+ridge.pred <- predict(ridge.mod, s = bestlam , newx = x[test , ])
+mean (( ridge.pred - y.test)^2)
+
+
+# 3 e)
+lasso.mod <- glmnet(x, y, alpha = 1, lambda = grid)
+
+coeffs = coef(lasso.mod)
+rows = rownames(coeffs)
+
+cols = c("lambda", "coeff", "value")
+plot_df = data.frame(matrix(ncol = length(cols), nrow = 0))
+colnames(plot_df) = cols
+
+
+for(row in rows[2:length(rows)]) {
+  temp_df = data.frame(lambda = grid, coeff = row, value = coeffs[row,])
+  plot_df = rbind(plot_df, temp_df)
+}
+
+ggplot(data = plot_df, aes(x=lambda, y=value)) + geom_line(aes(color = coeff), show.legend = FALSE) + scale_y_continuous(limits = c(-0.3, 0.3)) + scale_x_continuous(trans = "log10")
+
+
+# 3 f)
+lasso.mod <- glmnet(x[train , ], y[train], alpha = 1, lambda = grid)
+
+cv.out <- cv.glmnet(x[train , ], y[train], alpha = 1)
+bestlam = cv.out$lambda.min; bestlam
+
+lasso.pred <- predict(lasso.mod , s = bestlam , newx = x[test , ])
+mean (( lasso.pred - y.test)^2)
+
+lasso.coef <- predict(lasso.mod , type = "coefficients", s = bestlam)
+lasso.coef
+```
+
+```{r 4}
+library(ISLR2)
+set.seed(99)
+
+attach(Auto)
+
+# 4 a)
+max_run = 10
+max_degree = 10
+
+test_mse_array = matrix(0, max_run, max_degree)
+
+for (run in 1:max_run){
+  # get train indices
+  train <- sample (392 , 196)
+  
+  # run the validation method for this train test split
+  for (degree in 1:max_degree){
+    lm.fit = lm(mpg ~ poly(horsepower, degree), data = Auto , subset = train)
+    test_mse_array[run, degree] = mean(( mpg - predict(lm.fit , Auto))[-train ]^2)
+  }
+}
+
+get_test_mse <- function(run, degree){
+  return(test_mse_array[run, degree])
+} 
+
+run_arr = rep(1:max_degree, each=max_run)
+degree_arr = rep(1:max_run, max_degree)
+plot_df = data.frame(run = run_arr, degree = degree_arr, test_mse=mapply(get_test_mse, run_arr, degree_arr))
+plot_df$run = factor(plot_df$run)
+
+ggplot(data = plot_df, aes(x=degree, y=test_mse)) + geom_line(aes(colour=run)) +
+  labs(x="Degree of Polynomial", y="Mean Squared Error")
+
+
+# 4 b)
+library(boot)
+cv.error <- rep(0, max_degree)
+for (degree in 1:max_degree) {
+  glm.fit <- glm(mpg ~ poly(horsepower , degree), data = Auto)
+  cv.error[degree] <- cv.glm(Auto , glm.fit)$delta[1]
+}
+cv.error
+
+plot_df2 = data.frame(degree = 1:max_degree, test_mse = cv.error)
+
+ggplot(data = plot_df2, aes(x=degree, y=test_mse)) + geom_line() + geom_point() +
+  labs(x="Degree of Polynomial", y="Mean Squared Error")
+
+
+# 4 c)
+test_mse_array = matrix(0, max_run, max_degree)
+for (run in 1:max_run){
+  for (degree in 1:max_degree) {
+    glm.fit <- glm(mpg ~ poly(horsepower , degree), data = Auto)
+    test_mse_array[run, degree] <- cv.glm(Auto , glm.fit , K = 10)$delta [1]
+  }
+}
+test_mse_array
+
+plot_df3 = data.frame(run = run_arr, degree = degree_arr, test_mse=mapply(get_test_mse, run_arr, degree_arr))
+plot_df3$run = factor(plot_df3$run)
+
+ggplot(data = plot_df3, aes(x=degree, y=test_mse)) + geom_line(aes(colour=run)) +
+  labs(x="Degree of Polynomial", y="Mean Squared Error")
+
+
+# 4 d)
+train.error <- rep(0, max_degree)
+for (degree in 1:max_degree) {
+  glm.fit <- glm(mpg ~ poly(horsepower , degree), data = Auto)
+  train.error[degree] <- mean((glm.fit$residuals)^2)
+}
+plot_df4 = data.frame(degree = 1:max_degree, train_mse = train.error)
+
+ggplot(data = plot_df4, aes(x=degree, y=train_mse)) + geom_line() + geom_point() +
+  labs(x="Degree of Polynomial", y="Training Set Mean Squared Error")
+
+
+# 4 e)
+glm.fit <- glm(mpg ~ poly(horsepower , degree), data = Auto)
+summary(glm.fit)
+
+```
